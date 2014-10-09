@@ -30,7 +30,7 @@
 #import "NSData+Bitcoin.h"
 #import "NSData+Hash.h"
 
-#define TX_VERSION    0x00000001u
+#define TX_VERSION    0x00000002u
 #define TX_LOCKTIME   0x00000000u
 #define TXIN_SEQUENCE UINT32_MAX
 #define SIGHASH_ALL   0x00000001u

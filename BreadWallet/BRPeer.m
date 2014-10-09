@@ -33,19 +33,15 @@
 #import <arpa/inet.h>
 #import "Reachability.h"
 
-#define USERAGENT [NSString stringWithFormat:@"/breadwallet:%@/",\
+#define USERAGENT [NSString stringWithFormat:@"/ReddcoiniOS:%@/",\
                    NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"]]
 
 #define HEADER_LENGTH      24
 #define MAX_MSG_LENGTH     0x02000000
 #define MAX_GETDATA_HASHES 50000
 #define ENABLED_SERVICES   0     // we don't provide full blocks to remote nodes
-#define PROTOCOL_VERSION   70002
-#if TX_FEE_0_8_RULES
-#define MIN_PROTO_VERSION  70001 // peers earlier than this protocol version not supported (SPV mode required)
-#else
-#define MIN_PROTO_VERSION  70002 // peers earlier than this protocol version not supported (need v0.9 txFee relay rules)
-#endif
+#define PROTOCOL_VERSION   80000
+#define MIN_PROTO_VERSION  80000 // peers earlier than this protocol version not supported
 #define LOCAL_HOST         0x7f000001
 #define ZERO_HASH          @"0000000000000000000000000000000000000000000000000000000000000000".hexToData
 #define CONNECT_TIMEOUT    3.0
