@@ -45,14 +45,14 @@
 
 #if BITCOIN_TESTNET
 
-#define GENESIS_BLOCK_HASH @"000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943".hexToData.reverse
+#define GENESIS_BLOCK_HASH @"46db8d519c64586e3f0bf16153f61fdcf1d30b71ab159bf4a5b46dbcbc79d814".hexToData.reverse
 
 // The testnet genesis block uses the mainnet genesis block's merkle root. The hash is wrong using its own root.
 #define GENESIS_BLOCK [[BRMerkleBlock alloc] initWithBlockHash:GENESIS_BLOCK_HASH version:1\
     prevBlock:@"0000000000000000000000000000000000000000000000000000000000000000".hexToData\
-    merkleRoot:@"3ba3edfd7a7b12b27ac72c3e67768f617fC81bc3888a51323a9fb8aa4b1e5e4a".hexToData\
-    timestamp:1296688602.0 - NSTimeIntervalSince1970 target:0x1d00ffffu nonce:414098458u totalTransactions:1\
-    hashes:@"3ba3edfd7a7b12b27ac72c3e67768f617fC81bc3888a51323a9fb8aa4b1e5e4a".hexToData flags:@"00".hexToData height:0]
+    merkleRoot:@"ff79af16a9ffeb1b826de1ea7f24539a2fe3702fe987912b09072bc41dbc02b5".hexToData\
+    timestamp:1399544585.0 - NSTimeIntervalSince1970 target:0x1e0ffff0u nonce:1403777u totalTransactions:1\
+    hashes:@"ff79af16a9ffeb1b826de1ea7f24539a2fe3702fe987912b09072bc41dbc02b5".hexToData flags:@"proof-of-work".hexToData height:0]
 
 static const struct { uint32_t height; char *hash; time_t timestamp; uint32_t target; } checkpoint_array[] = {
     { 1, "b83611e21012e83487d035fea3ea75891affd8093033c088967fae1677e3557f", 1401378996, 0x1e0fffffu }
@@ -64,13 +64,13 @@ static const char *dns_seeds[] = {
 
 #else // main net
 
-#define GENESIS_BLOCK_HASH @"000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f".hexToData.reverse
+#define GENESIS_BLOCK_HASH @"b868e0d95a3c3c0e0dadc67ee587aaf9dc8acbf99e3b4b3110fad4eb74c1decc".hexToData.reverse
 
 #define GENESIS_BLOCK [[BRMerkleBlock alloc] initWithBlockHash:GENESIS_BLOCK_HASH version:1\
     prevBlock:@"0000000000000000000000000000000000000000000000000000000000000000".hexToData\
-    merkleRoot:@"3ba3edfd7a7b12b27ac72c3e67768f617fC81bc3888a51323a9fb8aa4b1e5e4a".hexToData\
-    timestamp:1231006505.0 - NSTimeIntervalSince1970 target:0x1d00ffffu nonce:2083236893u totalTransactions:1\
-    hashes:@"3ba3edfd7a7b12b27ac72c3e67768f617fC81bc3888a51323a9fb8aa4b1e5e4a".hexToData flags:@"00".hexToData height:0]
+    merkleRoot:@"ff79af16a9ffeb1b826de1ea7f24539a2fe3702fe987912b09072bc41dbc02b5".hexToData\
+    timestamp:1390280400.0 - NSTimeIntervalSince1970 target:0x1e0ffff0u nonce:222583475u totalTransactions:1\
+    hashes:@"ff79af16a9ffeb1b826de1ea7f24539a2fe3702fe987912b09072bc41dbc02b5".hexToData flags:@"proof-of-work".hexToData height:0]
 
 // blockchain checkpoints, these are also used as starting points for partial chain downloads, so they need to be at
 // difficulty transition boundaries in order to verify the block difficulty at the immediately following transition
