@@ -26,11 +26,13 @@
 #import "BRRootViewController.h"
 #import "BRReceiveViewController.h"
 #import "BRSendViewController.h"
+#import "BRAppDelegate.h"
 #import "BRBubbleView.h"
 #import "BRBouncyBurgerButton.h"
 #import "BRPeerManager.h"
 #import "BRWalletManager.h"
 #import "BRWallet.h"
+#import "UIImage+Blur.h"
 #import "Reachability.h"
 #import <sys/stat.h>
 #import <mach-o/dyld.h>
@@ -45,7 +47,7 @@
 
 @property (nonatomic, strong) IBOutlet UIProgressView *progress, *pulse;
 @property (nonatomic, strong) IBOutlet UILabel *percent;
-@property (nonatomic, strong) IBOutlet UIView *errorBar, *wallpaper, *splash, *logo;
+@property (nonatomic, strong) IBOutlet UIView *errorBar, *wallpaper, *splash, *logo, *blur;
 @property (nonatomic, strong) IBOutlet UIGestureRecognizer *navBarTap;
 @property (nonatomic, strong) IBOutlet UIBarButtonItem *lock;
 @property (nonatomic, strong) IBOutlet BRBouncyBurgerButton *burger;
@@ -56,6 +58,7 @@
 @property (nonatomic, strong) Reachability *reachability;
 @property (nonatomic, strong) id urlObserver, fileObserver, foregroundObserver, backgroundObserver, balanceObserver;
 @property (nonatomic, strong) id reachabilityObserver, syncStartedObserver, syncFinishedObserver, syncFailedObserver;
+@property (nonatomic, strong) id activeObserver, resignActiveObserver;
 @property (nonatomic, assign) NSTimeInterval timeout, start;
 
 @end
@@ -105,6 +108,14 @@
     self.urlObserver =
         [[NSNotificationCenter defaultCenter] addObserverForName:BRURLNotification object:nil queue:nil
         usingBlock:^(NSNotification *note) {
+            if (self.navigationController.topViewController != self) {
+                [self.navigationController popToRootViewControllerAnimated:YES];
+            }
+            
+            if (self.navigationController.presentedViewController) {
+                [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+            }
+        
             BRSendViewController *c = self.sendViewController;
         
             [self.pageViewController setViewControllers:@[c] direction:UIPageViewControllerNavigationDirectionForward
@@ -114,6 +125,14 @@
     self.fileObserver =
         [[NSNotificationCenter defaultCenter] addObserverForName:BRFileNotification object:nil queue:nil
         usingBlock:^(NSNotification *note) {
+            if (self.navigationController.topViewController != self) {
+                [self.navigationController popToRootViewControllerAnimated:YES];
+            }
+            
+            if (self.navigationController.presentedViewController) {
+                [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+            }
+        
             BRSendViewController *c = self.sendViewController;
 
             [self.pageViewController setViewControllers:@[c] direction:UIPageViewControllerNavigationDirectionForward
@@ -150,16 +169,36 @@
             if (self.appeared && m.wallet) { // lockdown the app
                 m.didAuthenticate = NO;
                 self.navigationItem.titleView = self.logo;
+                self.navigationItem.leftBarButtonItem.image = [UIImage imageNamed:@"burger"];
                 self.navigationItem.rightBarButtonItem = self.lock;
-
-                if (self.navigationController.topViewController != self) {
-                    [self.navigationController popToRootViewControllerAnimated:YES];
-                }
-
-                if (self.navigationController.presentedViewController) {
-                    [self.navigationController dismissViewControllerAnimated:YES completion:nil];
-                }
+                self.pageViewController.view.alpha = 1.0;
             }
+        }];
+    
+    self.activeObserver =
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification object:nil
+        queue:nil usingBlock:^(NSNotification *note) {
+            [self.blur removeFromSuperview];
+            self.blur = nil;
+        }];
+
+    self.resignActiveObserver =
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationWillResignActiveNotification object:nil
+        queue:nil usingBlock:^(NSNotification *note) {
+            UIView *v = [UIApplication sharedApplication].keyWindow;
+            UIImage *img;
+            
+            if (! [v viewWithTag:-411]) { // only take a screenshot if no views are marked highly sensitive
+                UIGraphicsBeginImageContext([UIScreen mainScreen].bounds.size);
+                [v drawViewHierarchyInRect:[UIScreen mainScreen].bounds afterScreenUpdates:NO];
+                img = UIGraphicsGetImageFromCurrentImageContext();
+                UIGraphicsEndImageContext();
+            }
+            else img = [UIImage imageNamed:@"wallpaper-default"];
+
+            [self.blur removeFromSuperview];
+            self.blur = [[UIImageView alloc] initWithImage:[img blurWithRadius:3]];
+            [v.subviews.lastObject addSubview:self.blur];
         }];
 
     self.reachabilityObserver =
@@ -177,13 +216,12 @@
         usingBlock:^(NSNotification *note) {
             if ([[BRPeerManager sharedInstance] syncProgress] < 1.0) return; // wait for sync before updating balance
             [self showBackupDialogIfNeeded];
+            if (! m.didAuthenticate) self.navigationItem.titleView = self.logo;
             self.navigationItem.title = [NSString stringWithFormat:@"%@ (%@)", [m stringForAmount:m.wallet.balance],
                                          [m localCurrencyStringForAmount:m.wallet.balance]];
-
-            // update receive qr code if it's not on screen
-            if (self.pageViewController.viewControllers.lastObject != self.receiveViewController) {
-                [self.receiveViewController updateAddress];
-            }
+            [self.receiveViewController updateAddress];
+            
+            // TODO: XXXX show new tx indicator if appropriate
         }];
 
     self.syncStartedObserver =
@@ -197,6 +235,7 @@
             if (p.lastBlockHeight + 2016/2 < p.estimatedBlockHeight &&
                 m.seedCreationTime + 60*60*24 < [NSDate timeIntervalSinceReferenceDate]) {
                 self.percent.hidden = NO;
+                self.navigationItem.titleView = nil;
                 self.navigationItem.title = NSLocalizedString(@"syncing...", nil);
             }
         }];
@@ -207,8 +246,10 @@
             if (self.timeout < 1.0) [self stopActivityWithSuccess:YES];
             [self showBackupDialogIfNeeded];
             self.percent.hidden = YES;
+            if (! m.didAuthenticate) self.navigationItem.titleView = self.logo;
             self.navigationItem.title = [NSString stringWithFormat:@"%@ (%@)", [m stringForAmount:m.wallet.balance],
                                          [m localCurrencyStringForAmount:m.wallet.balance]];
+            [self.receiveViewController updateAddress];
         }];
     
     self.syncFailedObserver =
@@ -218,11 +259,13 @@
             [self showErrorBar];
             [self showBackupDialogIfNeeded];
             self.percent.hidden = YES;
+            if (! m.didAuthenticate) self.navigationItem.titleView = self.logo;
             self.navigationItem.title = [NSString stringWithFormat:@"%@ (%@)", [m stringForAmount:m.wallet.balance],
                                          [m localCurrencyStringForAmount:m.wallet.balance]];
+            [self.receiveViewController updateAddress];
         }];
     
-    //TODO: XXX applicationProtectedDataDidBecomeAvailable observer
+    //TODO: XXXX applicationProtectedDataDidBecomeAvailable observer
     
     self.reachability = [Reachability reachabilityForInternetConnection];
     [self.reachability startNotifier];
@@ -245,7 +288,6 @@
 #endif
 
     if (! [[UIApplication sharedApplication] isProtectedDataAvailable] || m.wallet) {
-        // TODO: XXXX require auth
         self.splash.hidden = YES;
         self.navigationController.navigationBar.hidden = NO;
         [[UIApplication sharedApplication] setStatusBarHidden:NO];
@@ -276,6 +318,7 @@
             self.navigationController.navigationBar.hidden = NO;
         }];
 
+        m.didAuthenticate = YES;
         self.showTips = YES;
         [self unlock:nil];
         return;
@@ -288,8 +331,6 @@
     if ([[UIApplication sharedApplication] applicationState] != UIApplicationStateBackground) {
         [[BRPeerManager sharedInstance] connect];
     }
-
-    //TODO: try making the balance start at zero and quickly increase to the actual balance, ala city guides
 
     if (! self.appeared) {
         self.appeared = YES;
@@ -311,12 +352,14 @@
     if ([[BRWalletManager sharedInstance] wallet]) {
         self.splash.hidden = YES;
         self.navigationController.navigationBar.hidden = NO;
+        self.pageViewController.view.alpha = 1.0;
         if (self.reachability.currentReachabilityStatus == NotReachable) [self showErrorBar];
 
         if (self.navigationController.visibleViewController == self) {
             [[UIApplication sharedApplication] setStatusBarStyle:UIStatusBarStyleDefault animated:YES];
             [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationFade];
-
+            
+            //TODO: XXXX add swipe gesture recognizers to advance tip when scroll is disabled
             if (self.showTips) [self performSelector:@selector(tip:) withObject:nil afterDelay:0.3];
             [self showBackupDialogIfNeeded];
         }
@@ -375,6 +418,8 @@
     if (self.fileObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.fileObserver];
     if (self.foregroundObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.foregroundObserver];
     if (self.backgroundObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.backgroundObserver];
+    if (self.activeObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.activeObserver];
+    if (self.resignActiveObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.resignActiveObserver];
     if (self.reachabilityObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.reachabilityObserver];
     if (self.balanceObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.balanceObserver];
     if (self.syncStartedObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.syncStartedObserver];
@@ -582,8 +627,6 @@
         return;
     }
 
-    // BUG: XXXX don't show balance tip while "syncing..." is shown
-    
     UINavigationBar *b = self.navigationController.navigationBar;
 
     self.tipView = [BRBubbleView viewWithText:BALANCE_TIP
@@ -601,7 +644,7 @@
 {
     BRWalletManager *m = [BRWalletManager sharedInstance];
     
-    if (sender && ! m.didAuthenticate && ! [m authenticateWithPrompt:nil]) return;
+    if (sender && ! m.didAuthenticate && ! [m authenticateWithPrompt:nil andTouchId:YES]) return;
     
     self.navigationItem.titleView = nil;
     self.navigationItem.rightBarButtonItem = nil;
@@ -624,7 +667,9 @@
     else if (! [[BRWalletManager sharedInstance] didAuthenticate]) {
         [self unlock:sender];
     }
-    else [self tip:sender];
+    else if (! [self.navigationItem.title isEqual:NSLocalizedString(@"syncing...", nil)]) [self tip:sender];
+    
+    //TODO: XXXX show block number if syncing
 }
 
 #pragma mark - UIPageViewControllerDataSource

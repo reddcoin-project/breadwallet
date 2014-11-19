@@ -44,7 +44,8 @@
 @property (nonatomic, strong) NSArray *transactions;
 @property (nonatomic, assign) BOOL moreTx;
 @property (nonatomic, strong) NSMutableDictionary *txDates;
-@property (nonatomic, strong) id balanceObserver, txStatusObserver;
+@property (nonatomic, strong) id balanceObserver, txStatusObserver, backgroundObserver;
+@property (nonatomic, strong) id syncStartedObserver, syncFinishedObserver, syncFailedObserver;
 @property (nonatomic, strong) UIImageView *wallpaper;
 @property (nonatomic, strong) UITableViewController *selectorController;
 @property (nonatomic, strong) NSArray *selectorOptions;
@@ -65,6 +66,15 @@
     [self.navigationController.view insertSubview:self.wallpaper atIndex:0];
     self.navigationController.delegate = self;
     self.moreTx = ([BRWalletManager sharedInstance].wallet.recentTransactions.count > 5) ? YES : NO;
+
+    self.backgroundObserver =
+        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil
+        queue:nil usingBlock:^(NSNotification *note) {
+            self.navigationItem.titleView = self.logo;
+            self.navigationItem.rightBarButtonItem = self.lock;
+            [self.tableView reloadData];
+        }];
+
     if ([[BRWalletManager sharedInstance] didAuthenticate]) [self unlock:nil];
 }
 
@@ -95,6 +105,7 @@
                 }
                 else self.transactions = [NSArray arrayWithArray:a];
 
+                if (! m.didAuthenticate) self.navigationItem.titleView = self.logo;
                 self.navigationItem.title = [NSString stringWithFormat:@"%@ (%@)", [m stringForAmount:m.wallet.balance],
                                              [m localCurrencyStringForAmount:m.wallet.balance]];
 
@@ -114,6 +125,40 @@
                 [self.tableView reloadData];
             }];
     }
+    
+    if (! self.syncStartedObserver) {
+        self.syncStartedObserver =
+            [[NSNotificationCenter defaultCenter] addObserverForName:BRPeerManagerSyncStartedNotification object:nil
+            queue:nil usingBlock:^(NSNotification *note) {
+                BRPeerManager *p = [BRPeerManager sharedInstance];
+            
+                if (p.lastBlockHeight + 2016/2 < p.estimatedBlockHeight &&
+                    m.seedCreationTime + 60*60*24 < [NSDate timeIntervalSinceReferenceDate]) {
+                    self.navigationItem.titleView = nil;
+                    self.navigationItem.title = NSLocalizedString(@"syncing...", nil);
+                }
+            }];
+    }
+    
+    if (! self.syncFinishedObserver) {
+        self.syncFinishedObserver =
+            [[NSNotificationCenter defaultCenter] addObserverForName:BRPeerManagerSyncFinishedNotification object:nil
+            queue:nil usingBlock:^(NSNotification *note) {
+                if (! m.didAuthenticate) self.navigationItem.titleView = self.logo;
+                self.navigationItem.title = [NSString stringWithFormat:@"%@ (%@)", [m stringForAmount:m.wallet.balance],
+                                             [m localCurrencyStringForAmount:m.wallet.balance]];
+            }];
+    }
+    
+    if (! self.syncFailedObserver) {
+        self.syncFailedObserver =
+            [[NSNotificationCenter defaultCenter] addObserverForName:BRPeerManagerSyncFailedNotification object:nil
+            queue:nil usingBlock:^(NSNotification *note) {
+                if (! m.didAuthenticate) self.navigationItem.titleView = self.logo;
+                self.navigationItem.title = [NSString stringWithFormat:@"%@ (%@)", [m stringForAmount:m.wallet.balance],
+                                             [m localCurrencyStringForAmount:m.wallet.balance]];
+            }];
+    }
 }
 
 - (void)viewWillDisappear:(BOOL)animated
@@ -123,6 +168,12 @@
         self.balanceObserver = nil;
         if (self.txStatusObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.txStatusObserver];
         self.txStatusObserver = nil;
+        if (self.syncStartedObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.syncStartedObserver];
+        self.syncStartedObserver = nil;
+        if (self.syncFinishedObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.syncFinishedObserver];
+        self.syncFinishedObserver = nil;
+        if (self.syncFailedObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.syncFailedObserver];
+        self.syncFailedObserver = nil;
     }
 
     [super viewWillDisappear:animated];
@@ -141,6 +192,10 @@
     if (self.navigationController.delegate == self) self.navigationController.delegate = nil;
     if (self.balanceObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.balanceObserver];
     if (self.txStatusObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.txStatusObserver];
+    if (self.backgroundObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.backgroundObserver];
+    if (self.syncStartedObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.syncStartedObserver];
+    if (self.syncFinishedObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.syncFinishedObserver];
+    if (self.syncFailedObserver) [[NSNotificationCenter defaultCenter] removeObserver:self.syncFailedObserver];
 }
 
 - (void)setBackgroundForCell:(UITableViewCell *)cell tableView:(UITableView *)tableView indexPath:(NSIndexPath *)path
@@ -197,7 +252,7 @@
     date = [[[[f stringFromDate:[NSDate dateWithTimeIntervalSinceReferenceDate:t - 5*60]] lowercaseString]
              stringByReplacingOccurrencesOfString:@"am" withString:@"a"]
             stringByReplacingOccurrencesOfString:@"pm" withString:@"p"];
-    self.txDates[tx.txHash] = date;
+    if (tx.blockHeight != TX_UNCONFIRMED) self.txDates[tx.txHash] = date;
     return date;
 }
 
@@ -212,7 +267,7 @@
 {
     BRWalletManager *m = [BRWalletManager sharedInstance];
 
-    if (sender && ! m.didAuthenticate && ! [m authenticateWithPrompt:nil]) return;
+    if (sender && ! m.didAuthenticate && ! [m authenticateWithPrompt:nil andTouchId:YES]) return;
     
     self.navigationItem.titleView = nil;
     self.navigationItem.rightBarButtonItem = nil;
@@ -603,7 +658,7 @@
             [tableView deselectRowAtIndexPath:indexPath animated:YES];
             
             if (indexPath.row > 0 && indexPath.row >= self.transactions.count) { // more...
-                if (! m.didAuthenticate && ! [m authenticateWithPrompt:nil]) break;
+                if (! m.didAuthenticate && ! [m authenticateWithPrompt:nil andTouchId:YES]) break;
                 [self unlock:nil];
                 
                 [tableView beginUpdates];
@@ -622,7 +677,7 @@
             }
             else if (self.transactions.count > 0) {
                 if ([m.wallet amountSentByTransaction:self.transactions[indexPath.row]] > 0 &&
-                    ! m.didAuthenticate && ! [m authenticateWithPrompt:nil]) break;
+                    ! m.didAuthenticate && ! [m authenticateWithPrompt:nil andTouchId:YES]) break;
             
                 c = [self.storyboard instantiateViewControllerWithIdentifier:@"TxDetailViewController"];
                 [(id)c setTransaction:self.transactions[indexPath.row]];
@@ -660,7 +715,9 @@
                     [[[UIAlertView alloc] initWithTitle:NSLocalizedString(@"WARNING", nil)
                       message:NSLocalizedString(@"\nDO NOT let anyone see your backup phrase or they can spend your "
                                                 "bitcoins.\n\nDO NOT take a screenshot. Screenshots are visible to "
-                                                "other apps and devices.\n", nil) delegate:self
+                                                "other apps and devices.\n\nDO NOT type your backup phrase into "
+                                                "password managers or elsewhere. Other devices may be infected.\n",
+                                                nil) delegate:self
                       cancelButtonTitle:NSLocalizedString(@"cancel", nil)
                       otherButtonTitles:NSLocalizedString(@"show", nil), nil] show];
                     break;

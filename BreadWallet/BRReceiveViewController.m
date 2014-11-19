@@ -78,12 +78,12 @@
 
 - (void)updateAddress
 {
-    if (! [self.paymentRequest isValid]) return;
+    if (! [self.paymentRequest isValid] || [self.paymentAddress isEqual:self.addressButton.currentTitle]) return;
 
     NSString *s = [[NSString alloc] initWithData:self.paymentRequest.data encoding:NSUTF8StringEncoding];
     CIFilter *filter = [CIFilter filterWithName:@"CIQRCodeGenerator"];
 
-    [filter setValue:[s dataUsingEncoding:NSISOLatin1StringEncoding] forKey:@"inputMessage"];
+    [filter setValue:[s dataUsingEncoding:NSUTF8StringEncoding] forKey:@"inputMessage"];
     [filter setValue:@"L" forKey:@"inputCorrectionLevel"];
     UIGraphicsBeginImageContext(self.qrView.bounds.size);
 
@@ -170,6 +170,8 @@
 {
     if ([self nextTip]) return;
 
+    // TODO: XXXX add options for save qr as image and printing
+
     UIActionSheet *a = [UIActionSheet new];
 
     a.title = [NSString stringWithFormat:NSLocalizedString(@"Receive bitcoins at this address: %@", nil),
@@ -204,6 +206,8 @@
                       popIn] popOutAfterDelay:2.0]];
     }
     else if ([title isEqual:NSLocalizedString(@"send as email", nil)]) {
+        //TODO: add qr image to email
+        
         //TODO: implement BIP71 payment protocol mime attachement
         // https://github.com/bitcoin/bips/blob/master/bip-0071.mediawiki
         

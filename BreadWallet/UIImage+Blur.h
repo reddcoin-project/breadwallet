@@ -1,9 +1,9 @@
 //
-//  BRAppDelegate.h
+//  UIImage+Blur.h
 //  BreadWallet
 //
-//  Created by Aaron Voisine on 5/8/13.
-//  Copyright (c) 2013 Aaron Voisine <voisine@gmail.com>
+//  Created by Aaron Voisine on 11/8/14.
+//  Copyright (c) 2014 Aaron Voisine <voisine@gmail.com>
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
 //  of this software and associated documentation files (the "Software"), to deal
@@ -25,11 +25,8 @@
 
 #import <UIKit/UIKit.h>
 
-#define BRURLNotification  @"BRURLNotification"
-#define BRFileNotification @"BRFileNotification"
+@interface UIImage (Blur)
 
-@interface BRAppDelegate : UIResponder <UIApplicationDelegate>
-
-@property (strong, nonatomic) UIWindow *window;
+- (UIImage *)blurWithRadius:(CGFloat)radius;
 
 @end
